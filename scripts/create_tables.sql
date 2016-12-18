@@ -34,7 +34,19 @@ CREATE TABLE IF NOT EXISTS relationship (
   since         timestamp    -- UTC
 );
 
-CREATE USER scheduler_app WITH password 'notarealpassword!';
+DO
+$body$
+BEGIN
+   IF NOT EXISTS (
+      SELECT *
+      FROM   pg_catalog.pg_user
+      WHERE  usename = 'scheduler_app') THEN
+
+      CREATE USER scheduler_app WITH password 'notarealpassword!';
+   END IF;
+END
+$body$;
+
 GRANT all privileges ON database scheduler to scheduler_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON all tables IN schema public TO scheduler_app;
 GRANT ALL PRIVILEGES ON all sequences IN schema public TO scheduler_app;

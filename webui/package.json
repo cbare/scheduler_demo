@@ -1,0 +1,31 @@
+{
+  "name": "webui",
+  "version": "0.0.1",
+  "description": "A react.js UI for the Scheduler demo",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cbare/scheduler_demo.git"
+  },
+  "author": "J. Christopher Bare",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/cbare/scheduler_demo/issues"
+  },
+  "homepage": "https://github.com/cbare/scheduler_demo#readme",
+  "dependencies": {
+    "babel-core": "^6.21.0",
+    "babel-loader": "^6.2.10",
+    "babel-preset-es2015": "^6.18.0",
+    "babel-preset-react": "^6.16.0",
+    "lodash": "^4.17.3",
+    "moment": "^2.17.1",
+    "react": "^15.4.1",
+    "react-dom": "^15.4.1",
+    "webpack": "^1.14.0",
+    "whatwg-fetch": "^2.0.1"
+  }
+}

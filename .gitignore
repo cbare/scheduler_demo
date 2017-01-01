@@ -40,3 +40,7 @@ ENV/
 virtualenv*
 
 scripts/config.json
+scheduler/config.json
+scheduler/static/bundle.js
+scheduler/static/bundle.js.map
+

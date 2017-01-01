@@ -32,6 +32,18 @@ def before_request():
 def api_root():
     return 'Welcome'
 
+## hack for development purposes: serve static content via Flask
+@app.route('/')
+def root():
+    print('index.html requested')
+    return send_file('static/index.html')
+
+## hack for development purposes: serve static content via Flask
+@app.route('/js/<path:path>')
+def send_js(path):
+    print('%s requested'%path)
+    return send_from_directory('static', path)
+
 
 @app.route('/coaches/')
 def api_coaches():

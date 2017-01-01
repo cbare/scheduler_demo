@@ -1,0 +1,3 @@
+{
+    "db_connect":"dbname='scheduler' user='{USER}' host='localhost' password='{PASSWORD}'"
+}

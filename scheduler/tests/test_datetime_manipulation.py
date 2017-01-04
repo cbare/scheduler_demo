@@ -1,5 +1,4 @@
 from events import Event, divide_into_blocks, appointments
-from collections import namedtuple
 from datetime import datetime, timedelta
 
 

@@ -33,26 +33,26 @@ def api_root():
     return 'Welcome'
 
 ## hack for development purposes: serve static content via Flask
-@app.route('/')
+@app.route('/', methods=['GET'])
 def root():
     print('index.html requested')
     return send_file('static/index.html')
 
 ## hack for development purposes: serve static content via Flask
-@app.route('/js/<path:path>')
+@app.route('/js/<path:path>', methods=['GET'])
 def send_js(path):
     print('%s requested'%path)
     return send_from_directory('static', path)
 
 
-@app.route('/coaches/')
+@app.route('/coaches/', methods=['GET'])
 def api_coaches():
     coaches = db.get_coaches()
     print(coaches)
     return jsonify(coaches)
 
 
-@app.route('/schedule/<coach_id>/')
+@app.route('/schedule/<int:coach_id>/', methods=['GET'])
 def api_schedule(coach_id):
     """
     Client's view of a coach's schedule for browsing available appointments
@@ -60,15 +60,30 @@ def api_schedule(coach_id):
     s,e = week_window_to_show(request.args)
     return jsonify(db.get_appointments(coach_id, s, e))
 
-
-
-
-
-## TODO
-##   coach's view of schedule showing appointment names and details during a window
-##   client's view of schedule showing blocks open during a window
-##   create/read/update/delete event
-
+@app.route('/event/', methods=['POST', 'PUT', 'DELETE'])
+@app.route('/event/<int:event_id>/', methods=['GET', 'DELETE'])
+def api_event(event_id=None):
+    """
+    CRUD for events.
+    Post=book a new event, Put=update an existing event
+    """
+    if request.method=='POST':
+        ap_request = request.get_json()
+        ap = db.create_event(**ap_request)
+        return jsonify(ap)
+    elif request.method=='GET':
+        return jsonify(db.get_event(event_id))
+    elif request.method=='PUT':
+        ap_request = request.get_json()
+        ap = db.update_event(**ap_request)
+        return jsonify(ap)
+    elif request.method=='DELETE':
+        if not event_id:
+            ap_request = request.get_json()
+            event_id = ap_request['id']
+        return jsonify(db.delete_event(event_id))
+    else:
+        raise ValueError('Unsupported method '+request.method)
 
 
 

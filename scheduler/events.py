@@ -8,14 +8,14 @@ from dateutil.relativedelta import relativedelta, SU, MO, TU, WE, TH, FR, SA
 
 
 class Event:
-    def __init__(self, start_time, end_time, type, id=None, name=None, notes=None):
+    def __init__(self, start_time, end_time, type, id=None, name=None, notes=None, participants=[]):
         self.id = id
         self.start_time = start_time
         self.end_time = end_time
         self.name = name
         self.type = type
         self.notes = notes
-        self.participants = []
+        self.participants = participants
 
     def __repr__(self):
         return "Event(start_time="+str(self.start_time)+\
@@ -23,7 +23,8 @@ class Event:
                     ", type="+self.type+\
                     (", id="+str(self.id) if self.id else '')+\
                     (", name="+self.name if self.name else '')+\
-                    (", notes="+self.notes if self.notes else '')+")"
+                    (", notes="+self.notes if self.notes else '')+\
+                    (", participants="+str(self.participants) if self.participants else '')+")"
 
     def __eq__(self, other):
         return self.__dict__ == other.__dict__
@@ -100,6 +101,85 @@ class PostgresDataStore:
     def get_appointments(self, person_id, start_time, end_time):
         return appointments(self.get_events_between(person_id, start_time, end_time))
 
+    def create_event(self, start_time, end_time, name=None, notes=None, type='event', participants=[]):
+        conn = None
+        try:
+            conn = psycopg2.connect(self.connect_string, cursor_factory=DictCursor)
+            with conn:
+                with conn.cursor() as curs:
+                    query = """\
+                        INSERT INTO event
+                        (start_time, end_time, name, notes, type)
+                        VALUES
+                        (%s, %s, %s, %s, %s)
+                        RETURNING id;"""
+                    curs.execute(query, (start_time, end_time, name, notes, type))
+                    event_id = curs.fetchone()[0]
+                    for participant_id in participants:
+                        curs.execute("INSERT INTO participant (event_id, person_id) VALUES (%s, %s);", (event_id, participant_id))
+                    return Event(id=event_id,
+                                 start_time=start_time,
+                                 end_time=end_time,
+                                 name=name,
+                                 notes=notes,
+                                 type=type,
+                                 participants=participants)
+        finally:
+            if conn: conn.close()
+
+    def update_event(self, event):
+        conn = None
+        try:
+            conn = psycopg2.connect(self.connect_string, cursor_factory=DictCursor)
+            with conn:
+                with conn.cursor() as curs:
+                    query = """\
+                        UPDATE event
+                        SET (start_time, end_time, name, notes, type) = (%s,%s,%s,%s,%s)
+                        WHERE id=%s"""
+                    curs.execute(query, (event.start_time, event.end_time, event.name, event.notes, event.type, event.id))
+                    curs.execute("SELECT person_id FROM participant WHERE event_id=%s", (event.id,))
+                    current_participants = [row[0] for row in curs.fetchall()]
+                    for participant_id in event.participants:
+                        if participant_id not in current_participants:
+                            curs.execute("INSERT INTO participant (event_id, person_id) VALUES (%s, %s);", (event.id, participant_id))
+                    for participant_id in current_participants:
+                        if participant_id not in event.participants:
+                            curs.execute("DELETE FROM participant WHERE event_id=%s and person_id=%s;", (event.id, participant_id))
+                    curs.execute("SELECT person_id FROM participant WHERE event_id=%s", (event.id,))
+                    new_participants = [row[0] for row in curs.fetchall()]
+                    curs.execute("SELECT * FROM event WHERE id=%s", (event.id,))
+                    return Event(participants=new_participants, **curs.fetchone())
+        finally:
+            if conn: conn.close()
+
+    def delete_event(self, id):
+        conn = None
+        try:
+            conn = psycopg2.connect(self.connect_string, cursor_factory=DictCursor)
+            with conn:
+                with conn.cursor() as curs:
+                    curs.execute("SELECT person_id FROM participant WHERE event_id=%s", (id,))
+                    participants = [row[0] for row in curs.fetchall()]
+                    curs.execute("SELECT * FROM event WHERE id=%s", (id,))
+                    event = Event(participants=participants, **curs.fetchone())
+                    curs.execute("DELETE FROM event WHERE id=%s", (id,))
+                    return event
+        finally:
+            if conn: conn.close()
+
+    def get_event(self, id):
+        conn = None
+        try:
+            conn = psycopg2.connect(self.connect_string, cursor_factory=DictCursor)
+            with conn:
+                with conn.cursor() as curs:
+                    curs.execute("SELECT person_id FROM participant WHERE event_id=%s", (id,))
+                    participants = [row[0] for row in curs.fetchall()]
+                    curs.execute("SELECT * FROM event WHERE id=%s", (id,))
+                    return Event(participants=participants, **curs.fetchone())
+        finally:
+            if conn: conn.close()
 
 
 

@@ -43,7 +43,16 @@ clients = [
     'Stanton Sturdevant', 'Hugo Hugh', 'Caroline Crossman', 'Candie Collard',
     'Tawny Toenjes', 'Cristin Crutcher', 'Tien Turcotte', 'Rina Rabon',
     'Thaddeus Thurmon', 'Iluminada Infantino', 'Judie Jourdan', 'Tory Tookes',
-    'Kendall Kroger', 'Charolette Carrol']
+    'Kendall Kroger', 'Charolette Carrol', 'Kittie Kroh', 'Kamilah Koster',
+    'Gennie Gutierres', 'Noriko Niccum', 'Marcie Melo', 'Lorraine Lore',
+    'Marylyn Marrone', 'Louvenia Luiz', 'Marielle Mizzell', 'Etsuko Elledge',
+    'Kerstin Kreitzer', 'Lynne Lemaire', 'Donte Duffin', 'Maurita Medal',
+    'Lupe Lago', 'Cristy Croley', 'Ike Iglesia', 'Sybil Swinson', 'Tiffaney Tsang',
+    'Shayla Shupp', 'Jamar Jameson', 'Kris Kivi', 'Tomasa Twyman', 'Cassandra Calle',
+    'Tish Terhaar', 'Tony Taft', 'Joeann Jeanbart', 'Buck Brazil', 'Isaura Ingraham',
+    'Ali Avants', 'Dorothea Dinwiddie', 'Emery Estelle', 'Tyler Trombly',
+    'Rosaline Rhett', 'Shan Shults', 'Eugenia Eugene', 'Tiffani Turgeon',
+    'Wanetta Winslett', 'Carlie Charboneau', 'Carri Cooks']
 
 HOLIDAYS = [parse(d).date() for d in (
     "December 26, 2016",

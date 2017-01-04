@@ -23,14 +23,14 @@ CREATE TABLE IF NOT EXISTS person (
 );
 
 CREATE TABLE IF NOT EXISTS participant (
-  event_id      integer NOT NULL REFERENCES event (id),
-  person_id     integer NOT NULL REFERENCES person (id),
+  event_id      integer NOT NULL REFERENCES event (id) ON DELETE CASCADE,
+  person_id     integer NOT NULL REFERENCES person (id) ON DELETE CASCADE,
   CONSTRAINT participant_constraint UNIQUE (event_id,person_id)
 );
 
 CREATE TABLE IF NOT EXISTS relationship (
-  coach_id      integer NOT NULL REFERENCES person (id),
-  client_id     integer NOT NULL REFERENCES person (id),
+  coach_id      integer NOT NULL REFERENCES person (id) ON DELETE CASCADE,
+  client_id     integer NOT NULL REFERENCES person (id) ON DELETE CASCADE,
   since         timestamp    -- UTC
 );
 

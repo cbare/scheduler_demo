@@ -40,6 +40,7 @@ ENV/
 virtualenv*
 
 scripts/config.json
+scripts/create_tables.sql
 scheduler/config.json
 scheduler/static/bundle.js
 scheduler/static/bundle.js.map

@@ -25,6 +25,9 @@ def test_blocks():
 
     blocks = appointments(events)
 
-    print('\nblocks:')
-    for block in blocks:
-        print(' ', block)
+    assert Event(start_time=datetime(2020,4,1,11,0), end_time=datetime(2020,4,1,12,0), type='open slot', name='Available') in blocks
+    assert Event(start_time=datetime(2020,4,2,11,0), end_time=datetime(2020,4,2,12,0), type='unavailable slot', name='Booked') in blocks
+
+    # print('\nblocks:')
+    # for block in blocks:
+    #     print(' ', block)

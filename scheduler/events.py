@@ -39,7 +39,7 @@ def divide_into_blocks(event, block_len=timedelta(hours=1)):
         et = st + block_len
 
 
-def already_scheduled(event, events):
+def has_conflicts(event, events):
     for other_event in events:
         if other_event.type != 'schedulable' and \
            other_event.start_time < event.end_time and \
@@ -47,12 +47,14 @@ def already_scheduled(event, events):
             return True
     return False
 
+def remove_conflicting(events, potential_conflicts):
+    return [event for event in events if not has_conflicts(event, potential_conflicts)]
 
 def appointments(events):
     blocks = [block for event in events if event.type=='schedulable'
                     for block in divide_into_blocks(event)]
     for block in blocks:
-        if already_scheduled(block, events):
+        if has_conflicts(block, events):
             block.name = 'Booked'
             block.type = 'unavailable slot'
     return blocks
@@ -80,6 +82,24 @@ class PostgresDataStore:
         finally:
             if conn: conn.close()
 
+    def get_participants(self, event_id):
+        conn = None
+        try:
+            conn = psycopg2.connect(self.connect_string, cursor_factory=DictCursor)
+            with conn:
+                with conn.cursor() as curs:
+                    query = """\
+                        SELECT person.*
+                        FROM person
+                        JOIN participant on person.id=participant.person_id
+                        WHERE participant.event_id=%s"""
+                    curs.execute(query, (event_id,))
+                    if curs.rowcount < 1:
+                        raise ValueError("no participants for event id %s" % id)
+                    return [dict(row) for row in curs]
+        finally:
+            if conn: conn.close()
+
     def get_events_between(self, person_id, start_time, end_time):
         conn = None
         try:
@@ -87,19 +107,28 @@ class PostgresDataStore:
             with conn:
                 with conn.cursor() as curs:
                     query = """\
-                        SELECT e.id, e.type, e.start_time, e.end_time, e.name
+                        SELECT e.id, e.type, e.start_time, e.end_time, e.name, e.notes
                         FROM event e
                         JOIN participant p on e.id=p.event_id
                         WHERE p.person_id=%s
                         AND e.end_time>%s and e.start_time<%s
                         ORDER BY e.start_time;"""
                     curs.execute(query, (person_id, start_time, end_time))
-                    return [Event(**e) for e in curs]
+                    events = [Event(**e) for e in curs]
+                    for event in events:
+                        curs.execute("SELECT person_id FROM participant WHERE event_id=%s", (event.id,))
+                        event.participants = [row['person_id'] for row in curs]
+                    return events
         finally:
             if conn: conn.close()
 
     def get_appointments(self, person_id, start_time, end_time):
         return appointments(self.get_events_between(person_id, start_time, end_time))
+
+    def get_calendar(self, person_id, coach_id, start_time, end_time):
+        user_events = self.get_events_between(person_id, start_time, end_time)
+        coach_appointments = remove_conflicting(self.get_appointments(coach_id, start_time, end_time), user_events)
+        return coach_appointments + user_events
 
     def create_event(self, start_time, end_time, name=None, notes=None, type='event', participants=[]):
         conn = None
@@ -127,7 +156,7 @@ class PostgresDataStore:
         finally:
             if conn: conn.close()
 
-    def update_event(self, event):
+    def update_event(self, id, start_time, end_time, name, notes, type, participants=None):
         conn = None
         try:
             conn = psycopg2.connect(self.connect_string, cursor_factory=DictCursor)
@@ -137,18 +166,21 @@ class PostgresDataStore:
                         UPDATE event
                         SET (start_time, end_time, name, notes, type) = (%s,%s,%s,%s,%s)
                         WHERE id=%s"""
-                    curs.execute(query, (event.start_time, event.end_time, event.name, event.notes, event.type, event.id))
-                    curs.execute("SELECT person_id FROM participant WHERE event_id=%s", (event.id,))
-                    current_participants = [row[0] for row in curs.fetchall()]
-                    for participant_id in event.participants:
-                        if participant_id not in current_participants:
-                            curs.execute("INSERT INTO participant (event_id, person_id) VALUES (%s, %s);", (event.id, participant_id))
-                    for participant_id in current_participants:
-                        if participant_id not in event.participants:
-                            curs.execute("DELETE FROM participant WHERE event_id=%s and person_id=%s;", (event.id, participant_id))
-                    curs.execute("SELECT person_id FROM participant WHERE event_id=%s", (event.id,))
+                    curs.execute(query, (start_time, end_time, name, notes, type, id))
+                    if participants is not None:
+                        curs.execute("SELECT person_id FROM participant WHERE event_id=%s", (id,))
+                        current_participants = [row[0] for row in curs.fetchall()]
+                        for participant_id in participants:
+                            if participant_id not in current_participants:
+                                curs.execute("INSERT INTO participant (event_id, person_id) VALUES (%s, %s);", (id, participant_id))
+                        for participant_id in current_participants:
+                            if participant_id not in participants:
+                                curs.execute("DELETE FROM participant WHERE event_id=%s and person_id=%s;", (id, participant_id))
+                    curs.execute("SELECT person_id FROM participant WHERE event_id=%s", (id,))
                     new_participants = [row[0] for row in curs.fetchall()]
-                    curs.execute("SELECT * FROM event WHERE id=%s", (event.id,))
+                    curs.execute("SELECT * FROM event WHERE id=%s", (id,))
+                    if curs.rowcount < 1:
+                        raise ValueError("no event exists with id %s" % id)
                     return Event(participants=new_participants, **curs.fetchone())
         finally:
             if conn: conn.close()
@@ -177,6 +209,8 @@ class PostgresDataStore:
                     curs.execute("SELECT person_id FROM participant WHERE event_id=%s", (id,))
                     participants = [row[0] for row in curs.fetchall()]
                     curs.execute("SELECT * FROM event WHERE id=%s", (id,))
+                    if curs.rowcount < 1:
+                        raise ValueError("no event exists with id %s" % id)
                     return Event(participants=participants, **curs.fetchone())
         finally:
             if conn: conn.close()

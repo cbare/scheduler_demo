@@ -9,7 +9,7 @@ class ScheldulerJSONEncoder(JSONEncoder):
     def default(self, obj):
         if isinstance(obj, Event):
             return {attr:getattr(obj,attr)
-                    for attr in ['id','start_time','end_time', 'name', 'type', 'notes']
+                    for attr in ['id','start_time','end_time', 'name', 'type', 'notes', 'participants']
                     if getattr(obj,attr)}
         elif isinstance(obj, datetime):
             return obj.isoformat()+'Z'

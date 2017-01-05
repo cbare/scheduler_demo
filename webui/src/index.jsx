@@ -23,6 +23,34 @@ function checkStatus(response) {
   }
 }
 
+function styleEvent(event) {
+  if (!event) {
+    return "square"
+  }
+  else if (event.type=="open slot") {
+    return "square open"
+  }
+  else if (event.type=="unavailable slot") {
+    return "square unavailable"
+  }
+  else if (event.id) {
+    return "square event"
+  }
+  else {
+    return "square"
+  }
+}
+
+function fetchParticipants(event_id, handler) {
+  fetch("http://127.0.0.1:5000/participants/"+event_id+"/")
+    .then(checkStatus)
+    .then((response)=>response.json())
+    .then(handler)
+    .catch((error) => {
+        console.log("Error: "+error.message)
+      })
+}
+
 
 class SelectCoach extends React.Component {
   constructor(props) {
@@ -122,7 +150,7 @@ function AppointmentSlot(props) {
   const ap = props.appointment
   const label = ap.start_time.format('hh:mm a')
   return (
-    <button className={ap.type=="open slot" ? "square open" : "square unavailable"}
+    <button className={styleEvent(ap)}
       onClick={()=>props.onClick(props)}
       style={{position:'absolute', top:props.top, height:props.height}}>
       {label}
@@ -176,7 +204,10 @@ class ScheduleDialog extends React.Component {
     this.handleDescriptionChange = this.handleDescriptionChange.bind(this)
   }
   componentWillReceiveProps(nextProps) {
-    this.setState({ showModal:nextProps.is_visible })
+    this.setState({
+      showModal: nextProps.is_visible,
+      description: nextProps.appointment && nextProps.appointment.notes ? nextProps.appointment.notes : ""
+    })
   }
   close() {
     //this.setState({ showModal: false });
@@ -188,18 +219,64 @@ class ScheduleDialog extends React.Component {
   handleDescriptionChange(event) {
     this.setState({description: event.target.value});
   }
+  renderButtons(existing) {
+    if (existing) {
+      return(
+        <Modal.Footer>
+          <Button onClick={() => this.props.updateAppointment(this.state.description)}>Update Appointment</Button>
+          <Button onClick={() => this.props.cancelAppointment(this.props.appointment.id)}>Cancel Appointment</Button>
+          <Button onClick={() => this.close()}>Exit</Button>
+        </Modal.Footer>
+      )
+    } else {
+      return(
+        <Modal.Footer>
+          <Button onClick={() => this.props.scheduleAppointment(this.state.description)}>Book It!</Button>
+          <Button onClick={() => this.close()}>Exit</Button>
+        </Modal.Footer>
+      )
+    }
+  }
+  title(existing, ap) {
+    if (existing) {
+      return (<Modal.Title>{ap.name}</Modal.Title>)
+    } else {
+      return (<Modal.Title>Book a Coaching Session</Modal.Title>)
+    }
+  }
+  heading(existing, coach, participants, type) {
+    if (existing && type=='coaching') {
+      return (<h4>Coaching session with <span className="coach-name">{participants.filter((p)=>p.coach).map(formatName).join(", ")}</span></h4>)
+    } else if (existing) {
+      return (<h4>Event ({type})</h4>)
+    } else {
+      return (<h4>Schedule an coaching session with <span className="coach-name">{formatName(coach)}</span></h4>)
+    }
+  }
   render() {
-    const start_time = this.props.appointment ? this.props.appointment.start_time.format('h:mm a') : null
-    const end_time = this.props.appointment ? this.props.appointment.end_time.format('h:mm a') : null
-    const date = this.props.appointment ? this.props.appointment.start_time.format('LL') : null
+    var ap = null
+    var existing = false
+    var start_time = null
+    var end_time = null
+    var date = null
+    var type = null
+    if (this.props.appointment) {
+      ap = this.props.appointment
+      existing = ap.id
+      start_time = ap.start_time.format('h:mm a')
+      end_time = ap.end_time.format('h:mm a')
+      date = ap.start_time.format('LL')
+      type = ap.type
+    }
+    const participants = this.props.participants ? this.props.participants : []
     return (
       <Modal show={this.state.showModal} onHide={() => this.close()}>
         <Modal.Header closeButton>
-          <Modal.Title>Book a Coaching Session</Modal.Title>
+          {this.title(existing, this.props.appointment)}
         </Modal.Header>
         <Modal.Body>
-          <h4>Schedule an appointment with <span>{formatName(this.props.coach)}</span></h4>
-          <table>
+          {this.heading(existing, this.props.coach, participants, type)}
+          <table className="form-table">
             <tbody>
               <tr>
                 <th>Date</th>
@@ -214,12 +291,8 @@ class ScheduleDialog extends React.Component {
                 <td>{end_time}</td>
               </tr>
               <tr>
-                <th>Coach</th>
-                <td>{formatName(this.props.coach)}</td>
-              </tr>
-              <tr>
-                <th>Client</th>
-                <td>{formatName(this.props.client)}</td>
+                <th>Participants</th>
+                <td>{participants.map(formatName).join(", ")}</td>
               </tr>
               <tr>
                 <th>Description</th>
@@ -228,10 +301,7 @@ class ScheduleDialog extends React.Component {
             </tbody>
           </table>
         </Modal.Body>
-        <Modal.Footer>
-          <Button onClick={() => this.props.scheduleAppointment(this.state.description)}>Book It!</Button>
-          <Button onClick={() => this.close()}>Cancel</Button>
-        </Modal.Footer>
+        {this.renderButtons(existing)}
       </Modal>
     )
   }
@@ -260,23 +330,24 @@ class WeekCalendar extends React.Component {
     this.appointmentDialogClose = this.appointmentDialogClose.bind(this)
     this.appointmentDialogClose = this.appointmentDialogClose.bind(this)
     this.scheduleAppointment    = this.scheduleAppointment.bind(this)
+    this.cancelAppointment      = this.cancelAppointment.bind(this)
+    this.updateAppointment      = this.updateAppointment.bind(this)
   }
   componentDidMount() {
     this.fetchAppointments(this.state.selected_coach, this.state.calendarDate, moment(this.state.calendarDate).add(1,'week'))
   }
   fetchAppointments(coach, from, to) {
     if (coach) {
-      const url = "http://127.0.0.1:5000/schedule/"+coach.id+
-                  "/?from=" + from.toISOString() + "&to=" + to.toISOString()
-      console.log(url)
-      fetch(url).then(
-        (response) => {
-          response.json().then((events) => {
+      fetch("http://127.0.0.1:5000/calendar/"+this.state.user.id+'/'+coach.id+
+                  "/?from=" + from.toISOString() + "&to=" + to.toISOString())
+        .then(checkStatus)
+        .then((response)=>response.json())
+        .then((events) => {
             if (events && events.length) {
-              console.log('fetched ' + events.length + ' appointment slots.')
+              console.log('fetched ' + events.length + ' events.')
             }
             else {
-              console.log('received no appointment slots.')
+              console.log('received no events.')
             }
             for (var i=0; i<events.length; i++) {
               events[i].key = i
@@ -285,16 +356,25 @@ class WeekCalendar extends React.Component {
             }
             this.setState({events:events})
           })
-        },
-        (error) => {
-          console.log("Error: "+error.message)
-        }
-      )
+        .catch((error) => {
+            console.log("Error: "+error.message)
+          })
     }
   }
   appointmentDialogOpen(props) {
     console.log("scheduleAppointmentDialogOpen: ", props)
-    this.setState({appointment:props.appointment, showAppointmentDialog:true})
+    const ap = props.appointment
+    if (ap.type=="unavailable slot") {
+      // TODO show error dialog "This slot is already taken"
+    }
+    else if (ap.id) {
+      const participants = fetchParticipants(ap.id, (participants) =>
+        this.setState({appointment:ap, showAppointmentDialog:true, participants:participants}))
+    }
+    else if (ap.type=="open slot") {
+      const participants = [this.state.selected_coach, this.state.user]
+      this.setState({appointment:ap, showAppointmentDialog:true, participants:participants})
+    }
   }
   appointmentDialogClose() {
     this.setState({showAppointmentDialog:false}) 
@@ -327,6 +407,50 @@ class WeekCalendar extends React.Component {
             console.log("Error: "+error.message)
           })
     this.appointmentDialogClose()
+    this.fetchAppointments(this.state.selected_coach, this.state.calendarDate, moment(this.state.calendarDate).add(1,'week'))
+  }
+  updateAppointment(description) {
+    const ap = this.state.appointment
+    const ap_request = {
+      id:ap.id,
+      start_time:ap.start_time,
+      end_time:ap.end_time,
+      name:ap.name,
+      type:ap.type,
+      notes:description,
+      participants:ap.participants
+    }
+    fetch("http://127.0.0.1:5000/event/", {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(ap_request)
+      })
+        .then(checkStatus)
+        .then((response)=>response.json())
+        .then((json) => {
+            //this.setState({status:status.status})
+            console.log('created booking', json)
+          })
+        .catch((error) => {
+            console.log("Error: "+error.message)
+          })
+    this.appointmentDialogClose()
+    this.fetchAppointments(this.state.selected_coach, this.state.calendarDate, moment(this.state.calendarDate).add(1,'week'))
+  }
+  cancelAppointment(id) {
+    fetch("http://127.0.0.1:5000/event/"+id+"/", {method: 'DELETE'})
+        .then(checkStatus)
+        .then((response)=>response.json())
+        .then((json) => {
+            console.log('deleted event', json)
+          })
+        .catch((error) => {
+            console.log("Error: "+error.message)
+          })
+    this.appointmentDialogClose()
+    this.fetchAppointments(this.state.selected_coach, this.state.calendarDate, moment(this.state.calendarDate).add(1,'week'))
   }
   selectCoach(coach) {
     console.log('selectCoach to ', coach.id, coach.first_name, coach.last_name)
@@ -365,10 +489,13 @@ class WeekCalendar extends React.Component {
           appointment={this.state.appointment}
           coach={this.state.selected_coach}
           client={this.state.user}
+          participants={this.state.participants}
           ref={(scheduleDialog) => { this.scheduleDialog = scheduleDialog }}
           is_visible={this.state.showAppointmentDialog}
           appointmentDialogClose={this.appointmentDialogClose}
           scheduleAppointment={this.scheduleAppointment}
+          cancelAppointment={this.cancelAppointment}
+          updateAppointment={this.updateAppointment}
           />
       </div>
     )

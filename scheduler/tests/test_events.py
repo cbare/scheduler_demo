@@ -28,8 +28,9 @@ def test_event():
                             participants=[1,2,3,4,5,6,7,8])
     print("created:", event)
 
-    event = db.get_event(event.id)
+    event2 = db.get_event(event.id)
     print("got:", event)
+    assert event2==event
 
     event.participants.remove(8)
     event.participants.remove(7)
@@ -38,13 +39,19 @@ def test_event():
     event.notes = "Pizza and beer at Serious Pie Westlake, Seattle WA"
     event.name  = "Chris's Huge Birthday Party"
 
-    event = db.update_event(event)
+    event3 = db.update_event(**event.__dict__)
     print("updated:", event)
+    assert event3.name == "Chris's Huge Birthday Party"
+    assert event3.notes == "Pizza and beer at Serious Pie Westlake, Seattle WA"
+    assert event3.participants == [1,2,3,4,5,6,9,10]
 
     event = db.delete_event(event.id)
     print("deleted:", event)
 
-    event = db.get_event(event.id)
-    print("it's gone:", event)
+    try:
+        event = db.get_event(event.id)
+        assert False, "Should have raised ValueError"
+    except ValueError as ve:
+        print("it's gone:", event)
 
 

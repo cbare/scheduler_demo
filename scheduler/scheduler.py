@@ -60,6 +60,21 @@ def api_schedule(coach_id):
     s,e = week_window_to_show(request.args)
     return jsonify(db.get_appointments(coach_id, s, e))
 
+
+@app.route('/participants/<int:event_id>/', methods=['GET'])
+def api_participants(event_id):
+    return jsonify(db.get_participants(event_id))
+
+
+@app.route('/calendar/<int:person_id>/<int:coach_id>/', methods=['GET'])
+def api_schedule_with_coach(person_id, coach_id):
+    """
+    Client's view of a coach's schedule for browsing available appointments
+    """
+    s,e = week_window_to_show(request.args)
+    return jsonify(db.get_calendar(person_id, coach_id, s, e))
+
+
 @app.route('/event/', methods=['POST', 'PUT', 'DELETE'])
 @app.route('/event/<int:event_id>/', methods=['GET', 'DELETE'])
 def api_event(event_id=None):
@@ -84,7 +99,6 @@ def api_event(event_id=None):
         return jsonify(db.delete_event(event_id))
     else:
         raise ValueError('Unsupported method '+request.method)
-
 
 
 if __name__ == "__main__":

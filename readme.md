@@ -1,7 +1,6 @@
 # Scheduler demo app
 
-A demo of a web service using Flask and PostgreSQL.
-
+A demo of a web service using Flask and PostgreSQL and a web client built with React.
 
 
 ## Libraries
@@ -27,8 +26,17 @@ Or, if you don't want/need a background service you can just run:
     pip install nose
 
 
+### Tests
+
+To run tests, be in the root directory of the project. Add `-s` flag to see more output.
+
+    nosetests -v tests
+
+
 ### Node / React setup
-* see: https://www.codementor.io/tamizhvendan/tutorials/beginner-guide-setup-reactjs-environment-npm-babel-6-webpack-du107r9zr
+* see: [Setting Up a React.js Environment Using Npm, Babel 6 and Webpack](https://www.codementor.io/tamizhvendan/tutorials/beginner-guide-setup-reactjs-environment-npm-babel-6-webpack-du107r9zr)
+
+We'll use [nodejs](https://nodejs.org/) to run webpack and babel in our development environment. This lets us code in React's [.jsx](https://facebook.github.io/react/docs/jsx-in-depth.html) declarative syntax and the [ES6](http://es6-features.org/) dialect of javascript. Fetch will perform our HTTP requests and [momentjs] will make dealing with dates much nicer.
 
     brew install node
     mkdir my/project/dir
@@ -36,9 +44,9 @@ Or, if you don't want/need a background service you can just run:
     npm i --save babel-loader babel-core babel-preset-es2015 babel-preset-react
     npm i --save react react-dom
     npm i --save whatwg-fetch
-    npm i --save lodash
     npm i --save moment
 
 Put webpack in watch mode:
+
     node ./node_modules/.bin/webpack -d --progress --colors --watch
 

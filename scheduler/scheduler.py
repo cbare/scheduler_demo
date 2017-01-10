@@ -1,3 +1,6 @@
+"""
+Flask web service endpoints for the Scheduler app.
+"""
 import json
 import os
 import psycopg2
@@ -6,7 +9,7 @@ from psycopg2.extras import DictCursor
 from flask import Flask, request, session, g, redirect, url_for, abort, \
                   render_template, jsonify, send_from_directory, send_file
 from utils import week_window_to_show, ScheldulerJSONEncoder
-from events import PostgresDataStore
+from events import PostgresDataStore, NonExistantIdError
 
 app = Flask(__name__, static_url_path='/static/')
 app.json_encoder = ScheldulerJSONEncoder
@@ -47,23 +50,29 @@ def send_js(path):
 
 @app.route('/coaches/', methods=['GET'])
 def api_coaches():
+    """
+    Get the list of all coaches for populating menu
+    """
     coaches = db.get_coaches()
     print(coaches)
     return jsonify(coaches)
 
 
+@app.route('/participants/<int:event_id>/', methods=['GET'])
+def api_participants(event_id):
+    """
+    Get the list of people participating in the given event
+    """
+    return jsonify(db.get_participants(event_id))
+
+
 @app.route('/schedule/<int:coach_id>/', methods=['GET'])
 def api_schedule(coach_id):
     """
-    Client's view of a coach's schedule for browsing available appointments
+    Generic view of a coach's schedule
     """
     s,e = week_window_to_show(request.args)
     return jsonify(db.get_appointments(coach_id, s, e))
-
-
-@app.route('/participants/<int:event_id>/', methods=['GET'])
-def api_participants(event_id):
-    return jsonify(db.get_participants(event_id))
 
 
 @app.route('/calendar/<int:person_id>/<int:coach_id>/', methods=['GET'])
@@ -81,6 +90,7 @@ def api_event(event_id=None):
     """
     CRUD for events.
     Post=book a new event, Put=update an existing event
+    Delete can have a JSON body or just refer to an event by its ID in the URL
     """
     if request.method=='POST':
         ap_request = request.get_json()
@@ -99,6 +109,17 @@ def api_event(event_id=None):
         return jsonify(db.delete_event(event_id))
     else:
         raise ValueError('Unsupported method '+request.method)
+
+
+@app.errorhandler(NonExistantIdError)
+def handle_bad_request(ex):
+    """
+    Example of returning a proper HTTP error code and JSON error message
+    """
+    response = jsonify({'error-message':str(ex)})
+    response.status_code = 404
+    return response
+
 
 
 if __name__ == "__main__":

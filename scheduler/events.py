@@ -8,6 +8,13 @@ from dateutil.relativedelta import relativedelta, SU, MO, TU, WE, TH, FR, SA
 
 
 class Event:
+    """
+    Represent a calendar event.
+
+    Type should be one of a limited set of event type strings. The type
+    'schedulable' signifies a block of time during which a coach is
+    available for appointments.
+    """
     def __init__(self, start_time, end_time, type, id=None, name=None, notes=None, participants=[]):
         self.id = id
         self.start_time = start_time
@@ -31,6 +38,19 @@ class Event:
 
 
 def divide_into_blocks(event, block_len=timedelta(hours=1)):
+    """
+    Given a schedulable time period, divide into 1 hour blocks and
+    return generator of Event objects representing slots that can
+    be offered to clients.
+
+    :param event: a time period in which a coach is available for scheduling
+    :param block_len: length of blocks into which the initial time period will be subdivided
+
+    :type event: events.Event
+    :type block_len: datetime.timedelta
+
+    :return: a generator of Event objects
+    """
     st = event.start_time
     et = st + block_len
     while et <= event.end_time:
@@ -58,6 +78,10 @@ def appointments(events):
             block.name = 'Booked'
             block.type = 'unavailable slot'
     return blocks
+
+
+class NonExistantIdError(ValueError):
+    pass
 
 
 class PostgresDataStore:
@@ -95,7 +119,7 @@ class PostgresDataStore:
                         WHERE participant.event_id=%s"""
                     curs.execute(query, (event_id,))
                     if curs.rowcount < 1:
-                        raise ValueError("no participants for event id %s" % id)
+                        raise NonExistantIdError("no participants for event id %s" % event_id)
                     return [dict(row) for row in curs]
         finally:
             if conn: conn.close()
@@ -180,7 +204,7 @@ class PostgresDataStore:
                     new_participants = [row[0] for row in curs.fetchall()]
                     curs.execute("SELECT * FROM event WHERE id=%s", (id,))
                     if curs.rowcount < 1:
-                        raise ValueError("no event exists with id %s" % id)
+                        raise NonExistantIdError("no event exists with id %s" % id)
                     return Event(participants=new_participants, **curs.fetchone())
         finally:
             if conn: conn.close()
@@ -210,7 +234,7 @@ class PostgresDataStore:
                     participants = [row[0] for row in curs.fetchall()]
                     curs.execute("SELECT * FROM event WHERE id=%s", (id,))
                     if curs.rowcount < 1:
-                        raise ValueError("no event exists with id %s" % id)
+                        raise NonExistantIdError("no event exists with id %s" % id)
                     return Event(participants=participants, **curs.fetchone())
         finally:
             if conn: conn.close()

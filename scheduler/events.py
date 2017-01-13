@@ -107,6 +107,32 @@ class NonExistantIdError(ValueError):
     pass
 
 
+class PostgresCursor:
+    """
+    A context manager for Postgres cursors
+    """
+    def __init__(self, connect_string):
+        self.connect_string = connect_string
+
+    def __enter__(self):
+        self.conn = psycopg2.connect(self.connect_string, cursor_factory=DictCursor)
+        self.cursor = self.conn.cursor()
+        return self.cursor
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is None:
+            if self.conn:
+                self.conn.commit()
+        else:
+            if self.conn:
+                self.conn.rollback()
+        if self.cursor:
+            self.cursor.close()
+        if self.conn:
+            self.conn.close()
+        return False
+
+
 class PostgresDataStore:
     """
     Layer that represents our data store
@@ -118,59 +144,41 @@ class PostgresDataStore:
         """
         Return a list of dict's each representing a coach
         """
-        conn = None
-        try:
-            conn = psycopg2.connect(self.connect_string, cursor_factory=DictCursor)
-            with conn:
-                with conn.cursor() as curs:
-                    query = """\
-                        SELECT *
-                        FROM person p
-                        WHERE p.coach;"""
-                    curs.execute(query)
-                    return [dict(row) for row in curs]
-        finally:
-            if conn: conn.close()
+        with PostgresCursor(self.connect_string) as curs:
+            query = """\
+                SELECT *
+                FROM person p
+                WHERE p.coach;"""
+            curs.execute(query)
+            return [dict(row) for row in curs]
 
     def get_participants(self, event_id):
-        conn = None
-        try:
-            conn = psycopg2.connect(self.connect_string, cursor_factory=DictCursor)
-            with conn:
-                with conn.cursor() as curs:
-                    query = """\
-                        SELECT person.*
-                        FROM person
-                        JOIN participant on person.id=participant.person_id
-                        WHERE participant.event_id=%s"""
-                    curs.execute(query, (event_id,))
-                    if curs.rowcount < 1:
-                        raise NonExistantIdError("no participants for event id %s" % event_id)
-                    return [dict(row) for row in curs]
-        finally:
-            if conn: conn.close()
+        with PostgresCursor(self.connect_string) as curs:
+            query = """\
+                SELECT person.*
+                FROM person
+                JOIN participant on person.id=participant.person_id
+                WHERE participant.event_id=%s"""
+            curs.execute(query, (event_id,))
+            if curs.rowcount < 1:
+                raise NonExistantIdError("no participants for event id %s" % event_id)
+            return [dict(row) for row in curs]
 
     def get_events_between(self, person_id, start_time, end_time):
-        conn = None
-        try:
-            conn = psycopg2.connect(self.connect_string, cursor_factory=DictCursor)
-            with conn:
-                with conn.cursor() as curs:
-                    query = """\
-                        SELECT e.id, e.type, e.start_time, e.end_time, e.name, e.notes
-                        FROM event e
-                        JOIN participant p on e.id=p.event_id
-                        WHERE p.person_id=%s
-                        AND e.end_time>%s and e.start_time<%s
-                        ORDER BY e.start_time;"""
-                    curs.execute(query, (person_id, start_time, end_time))
-                    events = [Event(**e) for e in curs]
-                    for event in events:
-                        curs.execute("SELECT person_id FROM participant WHERE event_id=%s", (event.id,))
-                        event.participants = [row['person_id'] for row in curs]
-                    return events
-        finally:
-            if conn: conn.close()
+        with PostgresCursor(self.connect_string) as curs:
+            query = """\
+                SELECT e.id, e.type, e.start_time, e.end_time, e.name, e.notes
+                FROM event e
+                JOIN participant p on e.id=p.event_id
+                WHERE p.person_id=%s
+                AND e.end_time>%s and e.start_time<%s
+                ORDER BY e.start_time;"""
+            curs.execute(query, (person_id, start_time, end_time))
+            events = [Event(**e) for e in curs]
+            for event in events:
+                curs.execute("SELECT person_id FROM participant WHERE event_id=%s", (event.id,))
+                event.participants = [row['person_id'] for row in curs]
+            return events
 
     def get_appointments(self, person_id, start_time, end_time):
         return appointments(self.get_events_between(person_id, start_time, end_time))
@@ -186,96 +194,71 @@ class PostgresDataStore:
         return coach_appointments + user_events
 
     def create_event(self, start_time, end_time, name=None, notes=None, type='event', participants=[]):
-        conn = None
-        try:
-            conn = psycopg2.connect(self.connect_string, cursor_factory=DictCursor)
-            with conn:
-                with conn.cursor() as curs:
-                    query = """\
-                        INSERT INTO event
-                        (start_time, end_time, name, notes, type)
-                        VALUES
-                        (%s, %s, %s, %s, %s)
-                        RETURNING id;"""
-                    curs.execute(query, (start_time, end_time, name, notes, type))
-                    event_id = curs.fetchone()[0]
-                    for participant_id in participants:
-                        curs.execute("INSERT INTO participant (event_id, person_id) VALUES (%s, %s);", (event_id, participant_id))
-                    return Event(id=event_id,
-                                 start_time=start_time,
-                                 end_time=end_time,
-                                 name=name,
-                                 notes=notes,
-                                 type=type,
-                                 participants=participants)
-        finally:
-            if conn: conn.close()
+        with PostgresCursor(self.connect_string) as curs:
+            query = """\
+                INSERT INTO event
+                (start_time, end_time, name, notes, type)
+                VALUES
+                (%s, %s, %s, %s, %s)
+                RETURNING id;"""
+            curs.execute(query, (start_time, end_time, name, notes, type))
+            event_id = curs.fetchone()[0]
+            for participant_id in participants:
+                curs.execute("INSERT INTO participant (event_id, person_id) VALUES (%s, %s);", (event_id, participant_id))
+            return Event(id=event_id,
+                         start_time=start_time,
+                         end_time=end_time,
+                         name=name,
+                         notes=notes,
+                         type=type,
+                         participants=participants)
 
     def update_event(self, id, start_time, end_time, name, notes, type, participants=None):
-        conn = None
-        try:
-            conn = psycopg2.connect(self.connect_string, cursor_factory=DictCursor)
-            with conn:
-                with conn.cursor() as curs:
-                    query = """\
-                        UPDATE event
-                        SET (start_time, end_time, name, notes, type) = (%s,%s,%s,%s,%s)
-                        WHERE id=%s"""
-                    curs.execute(query, (start_time, end_time, name, notes, type, id))
+        with PostgresCursor(self.connect_string) as curs:
+            query = """\
+                UPDATE event
+                SET (start_time, end_time, name, notes, type) = (%s,%s,%s,%s,%s)
+                WHERE id=%s"""
+            curs.execute(query, (start_time, end_time, name, notes, type, id))
 
-                    ## update participants by adding or deleting participants as necessary
-                    if participants is not None:
-                        curs.execute("SELECT person_id FROM participant WHERE event_id=%s", (id,))
-                        current_participants = [row[0] for row in curs.fetchall()]
-                        for participant_id in participants:
-                            if participant_id not in current_participants:
-                                curs.execute("INSERT INTO participant (event_id, person_id) VALUES (%s, %s);", (id, participant_id))
-                        for participant_id in current_participants:
-                            if participant_id not in participants:
-                                curs.execute("DELETE FROM participant WHERE event_id=%s and person_id=%s;", (id, participant_id))
+            ## update participants by adding or deleting participants as necessary
+            if participants is not None:
+                curs.execute("SELECT person_id FROM participant WHERE event_id=%s", (id,))
+                current_participants = [row[0] for row in curs.fetchall()]
+                for participant_id in participants:
+                    if participant_id not in current_participants:
+                        curs.execute("INSERT INTO participant (event_id, person_id) VALUES (%s, %s);", (id, participant_id))
+                for participant_id in current_participants:
+                    if participant_id not in participants:
+                        curs.execute("DELETE FROM participant WHERE event_id=%s and person_id=%s;", (id, participant_id))
 
-                    ## construct newly modified event from database
-                    curs.execute("SELECT person_id FROM participant WHERE event_id=%s", (id,))
-                    new_participants = [row[0] for row in curs.fetchall()]
-                    curs.execute("SELECT * FROM event WHERE id=%s", (id,))
-                    if curs.rowcount < 1:
-                        raise NonExistantIdError("no event exists with id %s" % id)
-                    return Event(participants=new_participants, **curs.fetchone())
-        finally:
-            if conn: conn.close()
+            ## construct newly modified event from database
+            curs.execute("SELECT person_id FROM participant WHERE event_id=%s", (id,))
+            new_participants = [row[0] for row in curs.fetchall()]
+            curs.execute("SELECT * FROM event WHERE id=%s", (id,))
+            if curs.rowcount < 1:
+                raise NonExistantIdError("no event exists with id %s" % id)
+            return Event(participants=new_participants, **curs.fetchone())
 
     def delete_event(self, id):
-        conn = None
-        try:
-            conn = psycopg2.connect(self.connect_string, cursor_factory=DictCursor)
-            with conn:
-                with conn.cursor() as curs:
-                    ## return deleted event
-                    curs.execute("SELECT person_id FROM participant WHERE event_id=%s", (id,))
-                    participants = [row[0] for row in curs.fetchall()]
-                    curs.execute("SELECT * FROM event WHERE id=%s", (id,))
-                    event = Event(participants=participants, **curs.fetchone())
+        with PostgresCursor(self.connect_string) as curs:
+            ## return deleted event
+            curs.execute("SELECT person_id FROM participant WHERE event_id=%s", (id,))
+            participants = [row[0] for row in curs.fetchall()]
+            curs.execute("SELECT * FROM event WHERE id=%s", (id,))
+            event = Event(participants=participants, **curs.fetchone())
 
-                    ## delete
-                    curs.execute("DELETE FROM event WHERE id=%s", (id,))
-                    return event
-        finally:
-            if conn: conn.close()
+            ## delete
+            curs.execute("DELETE FROM event WHERE id=%s", (id,))
+            return event
 
     def get_event(self, id):
-        conn = None
-        try:
-            conn = psycopg2.connect(self.connect_string, cursor_factory=DictCursor)
-            with conn:
-                with conn.cursor() as curs:
-                    curs.execute("SELECT person_id FROM participant WHERE event_id=%s", (id,))
-                    participants = [row[0] for row in curs.fetchall()]
-                    curs.execute("SELECT * FROM event WHERE id=%s", (id,))
-                    if curs.rowcount < 1:
-                        raise NonExistantIdError("no event exists with id %s" % id)
-                    return Event(participants=participants, **curs.fetchone())
-        finally:
-            if conn: conn.close()
-
+        with PostgresCursor(self.connect_string) as curs:
+            curs.execute("SELECT person_id FROM participant WHERE event_id=%s", (id,))
+            participants = [row[0] for row in curs.fetchall()]
+            curs.execute("SELECT * FROM event WHERE id=%s", (id,))
+            if curs.rowcount < 1:
+                raise NonExistantIdError("no event exists with id %s" % id)
+            return Event(participants=participants, **curs.fetchone())
 
 

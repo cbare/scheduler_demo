@@ -15,7 +15,17 @@ class Event:
     'schedulable' signifies a block of time during which a coach is
     available for appointments.
     """
+
     def __init__(self, start_time, end_time, type, id=None, name=None, notes=None, participants=[]):
+        """
+        :param start_time: a datetime
+        :param end_time: a datetime
+        :param type: a string used to indicate event types that need special handling
+        :param id: primary key from DB
+        :param name: a string
+        :param notes: free text description of event
+        :param participants: IDs of people participating in the event
+        """
         self.id = id
         self.start_time = start_time
         self.end_time = end_time
@@ -60,6 +70,12 @@ def divide_into_blocks(event, block_len=timedelta(hours=1)):
 
 
 def has_conflicts(event, events):
+    """
+    Detect the precence of conflicting events
+
+    :param event: an event
+    :param events: a list of events that potentially conflict with the first event
+    """
     for other_event in events:
         if other_event.type != 'schedulable' and \
            other_event.start_time < event.end_time and \
@@ -68,9 +84,16 @@ def has_conflicts(event, events):
     return False
 
 def remove_conflicting(events, potential_conflicts):
+    """
+    Purge a list of events of those which have a conflict.
+    """
     return [event for event in events if not has_conflicts(event, potential_conflicts)]
 
 def appointments(events):
+    """
+    From the events of a coach's calendar, deduce the appointment slots
+    that are available.
+    """
     blocks = [block for event in events if event.type=='schedulable'
                     for block in divide_into_blocks(event)]
     for block in blocks:
@@ -92,6 +115,9 @@ class PostgresDataStore:
         self.connect_string = connect_string
 
     def get_coaches(self):
+        """
+        Return a list of dict's each representing a coach
+        """
         conn = None
         try:
             conn = psycopg2.connect(self.connect_string, cursor_factory=DictCursor)
@@ -150,6 +176,11 @@ class PostgresDataStore:
         return appointments(self.get_events_between(person_id, start_time, end_time))
 
     def get_calendar(self, person_id, coach_id, start_time, end_time):
+        """
+        For scheduling coaching sessions, we provide a view of all events within
+        a window for both the coach and the client, including slots available
+        for coaching sessions.
+        """
         user_events = self.get_events_between(person_id, start_time, end_time)
         coach_appointments = remove_conflicting(self.get_appointments(coach_id, start_time, end_time), user_events)
         return coach_appointments + user_events
@@ -191,6 +222,8 @@ class PostgresDataStore:
                         SET (start_time, end_time, name, notes, type) = (%s,%s,%s,%s,%s)
                         WHERE id=%s"""
                     curs.execute(query, (start_time, end_time, name, notes, type, id))
+
+                    ## update participants by adding or deleting participants as necessary
                     if participants is not None:
                         curs.execute("SELECT person_id FROM participant WHERE event_id=%s", (id,))
                         current_participants = [row[0] for row in curs.fetchall()]
@@ -200,6 +233,8 @@ class PostgresDataStore:
                         for participant_id in current_participants:
                             if participant_id not in participants:
                                 curs.execute("DELETE FROM participant WHERE event_id=%s and person_id=%s;", (id, participant_id))
+
+                    ## construct newly modified event from database
                     curs.execute("SELECT person_id FROM participant WHERE event_id=%s", (id,))
                     new_participants = [row[0] for row in curs.fetchall()]
                     curs.execute("SELECT * FROM event WHERE id=%s", (id,))
@@ -215,10 +250,13 @@ class PostgresDataStore:
             conn = psycopg2.connect(self.connect_string, cursor_factory=DictCursor)
             with conn:
                 with conn.cursor() as curs:
+                    ## return deleted event
                     curs.execute("SELECT person_id FROM participant WHERE event_id=%s", (id,))
                     participants = [row[0] for row in curs.fetchall()]
                     curs.execute("SELECT * FROM event WHERE id=%s", (id,))
                     event = Event(participants=participants, **curs.fetchone())
+
+                    ## delete
                     curs.execute("DELETE FROM event WHERE id=%s", (id,))
                     return event
         finally:

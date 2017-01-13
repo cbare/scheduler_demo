@@ -24,16 +24,6 @@ with open(config_path) as f:
 db = PostgresDataStore(config['db_connect'])
 
 
-@app.before_request
-def before_request():
-    ## for rough render time; see https://gist.github.com/lost-theory/4521102
-    g.request_start_time = time.time()
-    g.request_time = lambda: "%.5fs" % (time.time() - g.request_start_time)
-
-
-@app.route('/api/')
-def api_root():
-    return 'Welcome'
 
 ## hack for development purposes: serve static content via Flask
 @app.route('/', methods=['GET'])
@@ -64,15 +54,6 @@ def api_participants(event_id):
     Get the list of people participating in the given event
     """
     return jsonify(db.get_participants(event_id))
-
-
-@app.route('/schedule/<int:coach_id>/', methods=['GET'])
-def api_schedule(coach_id):
-    """
-    Generic view of a coach's schedule
-    """
-    s,e = week_window_to_show(request.args)
-    return jsonify(db.get_appointments(coach_id, s, e))
 
 
 @app.route('/calendar/<int:person_id>/<int:coach_id>/', methods=['GET'])

@@ -50,3 +50,47 @@ Put webpack in watch mode:
 
     node ./node_modules/.bin/webpack -d --progress --colors --watch
 
+
+### Virtual Env
+
+Set up a Python 3 virtual environoment:
+```
+virtualenv --python=python3 virtualenvpy3
+. ./virtualenvpy3/bin/activate
+pip install -r requirements.txt
+```
+
+### Database setup
+
+First, we need a running Postgres instance:
+```
+pg_ctl -D /usr/local/var/postgres start
+```
+Set the log location if you want to: `-l /usr/local/var/postgres/server.log`.
+
+To build the schema and populate it with made-up data:
+```
+createdb scheduler
+psql -f scripts/create_tables.sql scheduler
+python scripts/populate_db.py
+```
+
+Now, log in and check out our glorious data:
+```
+psql -d scheduler
+```
+
+### Running the app
+
+To run the app, start Flask. It will tell you where to point your browser.
+```
+cd scheduler
+export FLASK_APP=scheduler.py
+flask run
+```
+
+When you're done playing around, don't forget to shut Postgres down:
+```
+pg_ctl -D /usr/local/var/postgres stop
+```
+
